@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordinal Solid - Refined</title>
+    <style>
+        :root {
+            --green: #f8fae6;
+            --purple: #f1e6fa;
+            --angle: 25deg;
+            /* Gradient transition of 20px */
+            --grad-pos: 30%;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            /* 20px pronounced gradient transition */
+            background: linear-gradient(115deg, 
+                var(--green) calc(var(--grad-pos) - 10px), 
+                var(--purple) calc(var(--grad-pos) + 10px));
+            font-family: sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%) rotate(var(--angle));
+            text-transform: uppercase;
+            letter-spacing: 0.4em;
+            font-size: 1em;
+            font-weight: bold;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        #sidebar {
+            width: 350px; /* Slightly wider to accommodate labels closer to split */
+            height: 100%;
+            padding: 0;
+            position: relative;
+            z-index: 5;
+        }
+
+        .sidebar-inner {
+            position: absolute;
+            /* Positioning text close to the 30% mark where the colors meet */
+            right: 20px;
+            top: 35%;
+            transform: rotate(var(--angle));
+            transform-origin: right center;
+            text-align: right;
+        }
+
+        #sidebar ul { list-style: none; padding: 0; margin: 0; }
+        #sidebar li { margin-bottom: 25px; text-transform: uppercase; font-size: 0.75em; letter-spacing: 0.15em; }
+        #sidebar a { color: black; text-decoration: none; border-bottom: 2px solid black; padding-bottom: 2px; }
+
+        .sidebar-footer {
+            margin-top: 60px;
+            font-size: 0.6em;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            opacity: 0.8;
+            line-height: 1.8;
+        }
+
+        #main {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            padding-left: 50px;
+        }
+
+        svg#canvas {
+            height: 75vh;
+            width: auto;
+            overflow: visible;
+            z-index: 2;
+        }
+
+        /* Solid Masking Logic */
+        .solid-group { mask: url(#lineMask); }
+        .face { fill: black; stroke: none; }
+
+        /* Small Compass Labels - Moved further away */
+        .compass-label {
+            position: absolute;
+            font-size: 14px;
+            font-weight: bold;
+            opacity: 0;
+            user-select: none;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .node-handle {
+            fill: transparent;
+            cursor: crosshair;
+            pointer-events: all;
+        }
+    </style>
+</head>
+<body>
+
+<header>Ordinal Solid</header>
+
+<div id="sidebar">
+    <div class="sidebar-inner">
+        <ul>
+            <li><a href="#">Perspective</a></li>
+            <li><a href="#">Truncation</a></li>
+            <li><a href="#">Lattice</a></li>
+            <li><a href="#">Melencolia</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            Study 1514-A<br>
+            Rhombohedron System<br>
+            All Rights Reserved
+        </div>
+    </div>
+</div>
+
+<div id="main">
+    <div id="label-N" class="compass-label" style="transform: translate(0, -260px);">N</div>
+    <div id="label-S" class="compass-label" style="transform: translate(0, 310px);">S</div>
+    <div id="label-W" class="compass-label" style="transform: translate(-280px, 20px);">W</div>
+    <div id="label-E" class="compass-label" style="transform: translate(250px, 20px);">E</div>
+
+    <svg viewBox="0 0 500 600" id="canvas">
+        <defs>
+            <mask id="lineMask">
+                <rect width="100%" height="100%" fill="white" />
+                <g id="maskLines" stroke="black" stroke-width=".5" fill="none" stroke-linejoin="round"></g>
+            </mask>
+        </defs>
+
+        <g class="solid-group">
+            <g id="geometry"></g>
+        </g>
+        
+        <circle id="h1" cx="130" cy="170" r="45" class="node-handle" />
+        <circle id="h2" cx="80" cy="300" r="45" class="node-handle" />
+    </svg>
+</div>
+
+<script>
+    const svg = document.getElementById('canvas');
+    const geo = document.getElementById('geometry');
+    const maskLines = document.getElementById('maskLines');
+    const h1 = document.getElementById('h1');
+    const h2 = document.getElementById('h2');
+    
+    const labels = {
+        N: document.getElementById('label-N'),
+        S: document.getElementById('label-S'),
+        W: document.getElementById('label-W'),
+        E: document.getElementById('label-E')
+    };
+
+    const ext = {
+        top:     { x: 300, y: 140 }, 
+        topR:    { x: 320, y: 140 }, 
+        topL:    { x: 130, y: 140 }, 
+        midR:    { x: 400, y: 240 }, 
+        botR:    { x: 300, y: 480 }, 
+        botMidR: { x: 240, y: 550 }, 
+        botMidL: { x: 70,  y: 530 }, 
+        botL:    { x: 0,   y: 430 }, 
+        midL:    { x: 80,  y: 220 }  
+    };
+
+    const boundary = [ext.topL, ext.top, ext.topR, ext.midR, ext.botR, ext.botMidR, ext.botMidL, ext.botL, ext.midL];
+    let active = null;
+
+    function isInside(x, y, vs) {
+        let inside = false;
+        for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+            let xi = vs[i].x, yi = vs[i].y;
+            let xj = vs[j].x, yj = vs[j].y;
+            let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
+    function render() {
+        const p1 = { x: parseFloat(h1.getAttribute('cx')), y: parseFloat(h1.getAttribute('cy')) };
+        const p2 = { x: parseFloat(h2.getAttribute('cx')), y: parseFloat(h2.getAttribute('cy')) };
+
+        const paths = [
+            `${ext.topL.x},${ext.topL.y} ${ext.top.x},${ext.top.y} ${ext.topR.x},${ext.topR.y} ${p1.x},${p1.y}`,
+            `${ext.topL.x},${ext.topL.y} ${ext.midL.x},${ext.midL.y} ${ext.botL.x},${ext.botL.y} ${p2.x},${p2.y} ${p1.x},${p1.y}`,
+            `${ext.topR.x},${ext.topR.y} ${ext.midR.x},${ext.midR.y} ${ext.botR.x},${ext.botR.y} ${p2.x},${p2.y} ${p1.x},${p1.y}`,
+            `${ext.botL.x},${ext.botL.y} ${ext.botMidL.x},${ext.botMidL.y} ${ext.botMidR.x},${ext.botMidR.y} ${ext.botR.x},${ext.botR.y} ${p2.x},${p2.y}`
+        ];
+
+        geo.innerHTML = paths.map(p => `<polygon points="${p}" class="face" />`).join('');
+        maskLines.innerHTML = paths.map(p => `<polygon points="${p}" />`).join('');
+    }
+
+    window.addEventListener('mousemove', e => {
+        // Proximity for labels - sensing distance of 300px
+        Object.keys(labels).forEach(key => {
+            const label = labels[key];
+            const rect = label.getBoundingClientRect();
+            const lx = rect.left + rect.width / 2;
+            const ly = rect.top + rect.height / 2;
+            const dist = Math.hypot(e.clientX - lx, e.clientY - ly);
+            label.style.opacity = dist < 300 ? 0.75 * (1 - dist / 300) : 0;
+        });
+
+        if (!active) return;
+        const rect = svg.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (500 / rect.width);
+        const y = (e.clientY - rect.top) * (600 / rect.height);
+
+        if (isInside(x, y, boundary)) {
+            active.setAttribute('cx', x);
+            active.setAttribute('cy', y);
+            render();
+        }
+    });
+
+    [h1, h2].forEach(h => h.addEventListener('mousedown', () => active = h));
+    window.addEventListener('mouseup', () => active = null);
+
+    render();
+</script>
+
+</body>
+</html>
